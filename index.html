@@ -162,12 +162,28 @@ return J([nm(pick(['yoghurt','whey','eggs','tuna'],seed)),'fruit'])}
 
 function mrow(t,n,f,P,F,C){return`<div class="tl"><div class="h"><time>${t}</time><div><b>${n}</b><div class="mu">${f}</div></div></div><div class="mm"><span>Protein <em>${R(P)} g</em></span><span>Fat <em>${R(F)} g</em></span><span>Carbs <em>${R(C)} g</em></span></div></div>`}
 function tline(p,d){
+if(S.reg&&p.st!=='sick')return regLine(p,d);
 const has=p.st!=='sick'&&p.st!=='rest'&&!p.rest,m=hm(p.x.at),dur=+p.x.m;
 let L=AN.map(([n,t])=>({n,t})),recA=null;
 if(has){L=L.filter(a=>a.t<m-120||a.t>m+dur+60);recA=L.find(a=>a.t>=m+dur&&a.t<=m+dur+120)||null;L.push({n:'Pre-session',t:m-60});if(!recA)L.push({n:'Post-session',t:m+dur+30})}
 L.sort((a,b)=>a.t-b.t);
 const tot=[0,1,2].map(i=>L.reduce((s,a)=>s+W[a.n][i],0)),sd=Math.floor(d.getTime()/864e5);
 const it=L.map((a,j)=>({t:a.t,h:mrow(fm(a.t),a.n+(a===recA?' (recovery meal)':''),foodTxt(a.n,sd+j,p.st==='sick'),p.p*W[a.n][0]/tot[0],p.f*W[a.n][2]/tot[2],p.cb*W[a.n][1]/tot[1])}));
+if(has){const f=during(p);it.push({t:m,h:`<div class="tl"><div class="h"><time>${p.x.at}</time><div><b>${p.st==='injured'?'Modified session':TYPES[p.x.t]+' · '+p.x.m+' min'}</b></div></div><div class="mm"><span>${p.st==='injured'?'<em>Only what the injury allows</em>':'Fuel <em>'+f+'</em>'}</span></div></div>`})}
+return it.sort((a,b)=>a.t-b.t).map(x=>x.h).join('')}
+
+const FD={chicken:['Chicken breast',31,3.6,0],beef:['Lean beef mince',27,9,0],steak:['Steak',27,10,0],tuna:['Tuna, drained',25,1,0],salmon:['Salmon',22,12,0],fish:['White fish',22,1.5,0],rice:['Rice, cooked',2.7,.3,28],couscous:['Couscous, cooked',3.8,.2,23],sweetpotato:['Sweet potato',1.6,.1,20],potato:['Potato',2,.1,17],pasta:['Pasta, cooked',5,1.1,31],noodles:['Noodles, cooked',4.5,.5,25]};
+function portion(pr,cb,P,F,C,veg){const a=FD[pr],b=FD[cb];if(!a||!b)return null;
+const gc=Math.max(0,C)/b[3]*100,gp=Math.max(0,(P-gc*b[1]/100)/(a[1]/100)),fp=gp*a[2]/100+gc*b[2]/100,oil=Math.max(0,Math.min(25,(F-fp)/.92));
+const r10=x=>Math.round(x/10)*10,GP=r10(gp),GC=r10(gc),OI=Math.round(oil/5)*5;
+return{f:`${a[0]} ${GP} g + ${b[0].toLowerCase()} ${GC} g + ${veg}${OI?' + '+OI+' g olive oil':''}`,p:GP*a[1]/100+GC*b[1]/100,c:GC*b[3]/100,fa:GP*a[2]/100+GC*b[2]/100+OI*.92}}
+function regLine(p,d){const g=S.reg,has=p.st!=='rest'&&!p.rest,m=hm(p.x.at),dur=+p.x.m,i=(d.getDay()+6)%7,it=[];
+let fx=g.fixed.map(x=>({...x,tm:hm(x.t)})),post=null;
+if(has){const keep=[];fx.forEach(x=>{if(x.mv&&x.tm>m-60&&x.tm<m+dur+45)post={...x,n:'Post-session',tm:m+dur+30};else keep.push(x)});fx=keep;
+fx.push(m>=660?{n:'Pre-session',tm:m-45,f:g.pre,p:4,c:45,fa:1}:{n:'Pre-session',tm:m-30,f:'Banana (optional)',p:1,c:27,fa:0});if(post)fx.push(post)}
+const sum=k=>fx.reduce((s,x)=>s+x[k],0),rem=[Math.max(25,p.p-sum('p')),Math.max(20,p.cb-sum('c')),Math.max(10,p.f-sum('fa'))];
+fx.forEach(x=>it.push({t:x.tm,h:mrow(fm(x.tm),x.n,esc(x.f),x.p,x.fa,x.c)}));
+[{n:'Lunch',tm:hm(g.lt||'13:00'),k:.45,pc:g.lunch[i],v:'salad'},{n:'Dinner',tm:hm(g.dt||'19:00'),k:.55,pc:g.dinner[i],v:'veg'}].forEach(l=>{const q=portion(l.pc[0],l.pc[1],rem[0]*l.k,rem[2]*l.k,rem[1]*l.k,l.v);if(q)it.push({t:l.tm,h:mrow(fm(l.tm),l.n,esc(q.f),q.p,q.fa,q.c)})});
 if(has){const f=during(p);it.push({t:m,h:`<div class="tl"><div class="h"><time>${p.x.at}</time><div><b>${p.st==='injured'?'Modified session':TYPES[p.x.t]+' · '+p.x.m+' min'}</b></div></div><div class="mm"><span>${p.st==='injured'?'<em>Only what the injury allows</em>':'Fuel <em>'+f+'</em>'}</span></div></div>`})}
 return it.sort((a,b)=>a.t-b.t).map(x=>x.h).join('')}
 
@@ -244,7 +260,7 @@ const opt=(o,s)=>Object.keys(o).map(k=>`<option value="${k}" ${k===s?'selected':
 const fchips=g=>Object.keys(FOODS[g]).map(k=>`<button class="chip ${S.food[k]===1?'like':S.food[k]===-1?'dis':''}" data-a="food" data-v="${k}">${FOODS[g][k]}</button>`).join('');
 function profile(){return`<h1 class="b">Profile</h1><p class="mu">Changes save automatically.</p><div style="margin-top:14px">
 <div class="card"><label>First name<input data-pf="name" value="${esc(S.name)}"></label><div class="two"><label>Weight (kg)<input data-pf="kg" type="number" inputmode="decimal" value="${S.kg}"></label><label>Height (cm)<input data-pf="cm" type="number" inputmode="decimal" value="${S.cm}"></label></div><div class="two"><label>Body fat % (estimate)<input data-pf="bf" type="number" inputmode="decimal" value="${S.bf}"></label><label>Goal<select data-pf="goal">${opt(GOALS,S.goal)}</select></label></div></div>
-<div class="card"><p class="lbl">Food you like and dislike</p><p class="sm" style="margin:-4px 0 12px">Tap once to like, twice to dislike, three times to clear. Your meals follow your picks.</p><p class="lbl">Protein</p><div class="chips" style="margin-top:0">${fchips('prot')}</div><p class="lbl">Carbs</p><div class="chips" style="margin-top:0">${fchips('carb')}</div></div>
+<div class="card"><p class="lbl">Food you like and dislike</p><p class="sm" style="margin:-4px 0 12px">Tap once to like, twice to dislike, three times to clear. ${S.reg?'These only apply when you have no regular meal plan set.':'Your meals follow your picks.'}</p><p class="lbl">Protein</p><div class="chips" style="margin-top:0">${fchips('prot')}</div><p class="lbl">Carbs</p><div class="chips" style="margin-top:0">${fchips('carb')}</div></div>
 <div class="row"><button class="btn ghost" data-a="signout">Sign out</button><button class="btn ghost" data-a="reset">Start over</button></div></div>`}
 function login(){return`<h1 class="b">Cadence</h1><p class="mu">Sign in to your plan.</p><div class="card" style="margin-top:14px"><label>Email<input id="em" type="email" autocomplete="username" inputmode="email"></label><label>Password<input id="pw" type="password" autocomplete="current-password"></label><div class="row"><button class="btn" data-a="signin">Sign in</button><button class="btn ghost" data-a="signup">Create account</button></div><p id="nt" class="sm" role="status" style="margin:12px 0 0"></p><p class="sm" style="margin:8px 0 0">This is a one-person app. Only the first account can be created.</p></div>`}
 function setup(){return`<h1 class="b">Welcome to Cadence</h1><p class="mu">Takes a minute. Your details stay on this device.</p><div style="margin-top:14px"><div class="card"><label>First name<input id="nm"></label><div class="two"><label>Weight (kg)<input id="kg" type="number" inputmode="decimal" value="80"></label><label>Height (cm)<input id="cm" type="number" inputmode="decimal" value="178"></label></div><div class="two"><label>Body fat % (estimate)<input id="bf" type="number" inputmode="decimal" value="20"></label><label>Goal<select id="gl">${opt(GOALS,'lose')}</select></label></div></div>
