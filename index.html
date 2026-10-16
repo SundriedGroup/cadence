@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Cadence</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Sora:wght@500;600;700&display=swap">
 <style>
 :root{--bg:#F3F6F1;--card:#fff;--tx:#14201A;--mu:#566860;--ln:#DCE4DC;--ac:#C6F24E;--at:#3F6B00;--on:#0F1412;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -87,34 +88,33 @@ const R=Math.round,fmt=n=>R(n).toLocaleString('en-US');
 const ti=()=>(new Date().getDay()+6)%7;
 const dateFor=i=>addDays(sod(new Date()),(i-ti()+7)%7);
 let S=null,V='today',EM=false,PV=ti();
-let DBX=null,LOG={},wrote='',writing=false,pend=false,tm=null,note='';
+const SB_URL='https://uzswfnadwnxebrvcsblf.supabase.co',SB_KEY='sb_publishable_3m0-eb4jD6zN8e_1SXBLiQ_OGrdvWI_';
+let SB=null,UID=null,LOG={},wrote='',writing=false,tm=null,note='';
 V='loading';
 const sj=v=>v&&typeof v==='object'?Array.isArray(v)?'['+v.map(sj).join(',')+']':'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+sj(v[k])).join(',')+'}':JSON.stringify(v);
 const norm=()=>{S.food=S.food||{};S.ov=S.ov||{};S.st=S.st||{};S.fb=S.fb||{};S.events=S.events||[];S.done=S.done||{};S.sched.forEach(x=>{if(!x.at)x.at='06:00'});S.log=LOG};
 const typing=()=>{const a=document.activeElement;return !!a&&['INPUT','SELECT','TEXTAREA'].includes(a.tagName)};
 const payload=()=>{const p={...S};delete p.log;return JSON.parse(JSON.stringify(p))};
-async function flush(){if(!DBX||!S)return;if(writing){pend=true;return}writing=true;
-try{do{pend=false;const p=payload(),j=sj(p);if(j!==wrote){await DBX.doc('app/profile').set(p);wrote=j}}while(pend)}
-catch(e){note='Could not save ('+((e&&e.code)||'error')+'). Your last change may not be stored.';render(true)}
+async function flush(){tm=null;if(!SB||!UID||!S||writing)return;const p=payload(),j=sj(p);if(j===wrote)return;writing=true;
+try{const r=await SB.from('profile').upsert({user_id:UID,data:p,updated_at:new Date().toISOString()});if(r.error)throw r.error;wrote=j;if(sj(payload())!==j)save()}
+catch(e){note='Could not save. Your last change may not be stored.';render(true)}
 writing=false}
-const save=()=>{if(!DBX){try{localStorage.setItem('cad1',JSON.stringify(S))}catch(e){}return}clearTimeout(tm);tm=setTimeout(flush,500)};
-async function boot(){let db=null;
-try{db=window.claude?await window.claude.use('db'):null}catch(e){}
-DBX=db;
-if(!db){let c=null;try{c=JSON.parse(localStorage.getItem('cad1')||'null')}catch(e){}
-note='Not signed in to your data store, so changes stay on this device only.';
-if(c){LOG=c.log||{};S=c;norm();V='today'}else V='setup';render();return}
-db.doc('app/profile').onSnapshot(snap=>{
-if(snap.metadata.hasPendingWrites)return;
-if(!snap.exists){if(!S){V='setup';render()}return}
-const d=snap.data(),j=sj(d);if(S&&j===wrote)return;
-wrote=j;S=JSON.parse(JSON.stringify(d));norm();
-if(V==='loading'||V==='setup'){V='today';render()}else if(!typing())render(true)},
-e=>{note='Could not load your saved data ('+((e&&e.code)||'error')+').';if(!S)V='setup';render()});
-db.collection('log').onSnapshot(snap=>{const L={};snap.docs.forEach(x=>{L[x.id]=x.data()});
-const ch=sj(L)!==sj(LOG);LOG=L;if(S){S.log=LOG;if(ch&&!typing()&&V!=='setup'&&V!=='loading')render(true)}},
-e=>{note='Could not load check-ins ('+((e&&e.code)||'error')+').';render(true)})}
-
+const save=()=>{clearTimeout(tm);tm=setTimeout(flush,500)};
+async function load(keep){
+const [p,l]=await Promise.all([SB.from('profile').select('data').eq('user_id',UID).maybeSingle(),SB.from('log').select('day,data')]);
+if(p.error||l.error){note='Could not load your data. Check your connection.';if(!S)V='login';render(keep);return}
+const L={};(l.data||[]).forEach(r=>{L[r.day]=r.data});
+if(!p.data){LOG=L;S=null;V='setup';render();return}
+const first=!S,old=first?'':sj(payload())+sj(LOG);
+LOG=L;S=p.data.data;norm();wrote=sj(payload());
+if(first){V=(V==='loading'||V==='login'||V==='setup')?'today':V;render()}else if(old!==sj(payload())+sj(LOG)&&!typing())render(true)}
+async function boot(){
+if(!window.supabase){note='Could not load the sign-in library. Check your connection.';V='login';render();return}
+SB=window.supabase.createClient(SB_URL,SB_KEY);
+SB.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'){UID=null;S=null;LOG={};V='login';render()}});
+const r=await SB.auth.getSession();
+if(r.data&&r.data.session){UID=r.data.session.user.id;await load()}else{V='login';render()}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&UID&&S&&!tm&&!writing)load(true)})}
 function cls(x){if(!x||x.t==='rest')return'Rest';const m=+x.m||0;
 if(x.t==='easy')return m<=45?'Easy':m<=75?'Moderate':'Hard';
 if(x.t==='tempo')return m<=45?'Moderate':'Hard';
@@ -245,13 +245,14 @@ const fchips=g=>Object.keys(FOODS[g]).map(k=>`<button class="chip ${S.food[k]===
 function profile(){return`<h1 class="b">Profile</h1><p class="mu">Changes save automatically.</p><div style="margin-top:14px">
 <div class="card"><label>First name<input data-pf="name" value="${esc(S.name)}"></label><div class="two"><label>Weight (kg)<input data-pf="kg" type="number" inputmode="decimal" value="${S.kg}"></label><label>Height (cm)<input data-pf="cm" type="number" inputmode="decimal" value="${S.cm}"></label></div><div class="two"><label>Body fat % (estimate)<input data-pf="bf" type="number" inputmode="decimal" value="${S.bf}"></label><label>Goal<select data-pf="goal">${opt(GOALS,S.goal)}</select></label></div></div>
 <div class="card"><p class="lbl">Food you like and dislike</p><p class="sm" style="margin:-4px 0 12px">Tap once to like, twice to dislike, three times to clear. Your meals follow your picks.</p><p class="lbl">Protein</p><div class="chips" style="margin-top:0">${fchips('prot')}</div><p class="lbl">Carbs</p><div class="chips" style="margin-top:0">${fchips('carb')}</div></div>
-<button class="btn ghost" data-a="reset">Start over</button></div>`}
+<div class="row"><button class="btn ghost" data-a="signout">Sign out</button><button class="btn ghost" data-a="reset">Start over</button></div></div>`}
+function login(){return`<h1 class="b">Cadence</h1><p class="mu">Sign in to your plan.</p><div class="card" style="margin-top:14px"><label>Email<input id="em" type="email" autocomplete="username" inputmode="email"></label><label>Password<input id="pw" type="password" autocomplete="current-password"></label><div class="row"><button class="btn" data-a="signin">Sign in</button><button class="btn ghost" data-a="signup">Create account</button></div><p id="nt" class="sm" role="status" style="margin:12px 0 0"></p><p class="sm" style="margin:8px 0 0">This is a one-person app. Only the first account can be created.</p></div>`}
 function setup(){return`<h1 class="b">Welcome to Cadence</h1><p class="mu">Takes a minute. Your details stay on this device.</p><div style="margin-top:14px"><div class="card"><label>First name<input id="nm"></label><div class="two"><label>Weight (kg)<input id="kg" type="number" inputmode="decimal" value="80"></label><label>Height (cm)<input id="cm" type="number" inputmode="decimal" value="178"></label></div><div class="two"><label>Body fat % (estimate)<input id="bf" type="number" inputmode="decimal" value="20"></label><label>Goal<select id="gl">${opt(GOALS,'lose')}</select></label></div></div>
 <label style="display:flex;gap:10px;align-items:flex-start;font-size:14px"><input id="ok" type="checkbox" style="width:24px;min-height:24px;margin:0"> I am 18 or older, healthy to train, and understand this is guidance, not medical advice.</label><button class="btn" data-a="start">Start</button></div>`}
 
 function render(keep){
 const nav=document.getElementById('nav'),app=document.getElementById('app');
-app.innerHTML=(note?'<p class="sm" role="status">'+esc(note)+'</p>':'')+(V==='loading'?'<p class="mu" style="margin-top:40px">Loading your plan…</p>':V==='setup'?setup():V==='plan'?planV():V==='progress'?progress():V==='meals'?mealsV():V==='races'?races():V==='profile'?profile():today());
+app.innerHTML=(note?'<p class="sm" role="status">'+esc(note)+'</p>':'')+(V==='loading'?'<p class="mu" style="margin-top:40px">Loading your plan…</p>':V==='login'?login():V==='setup'?setup():V==='plan'?planV():V==='progress'?progress():V==='meals'?mealsV():V==='races'?races():V==='profile'?profile():today());
 nav.hidden=!S||V==='loading';
 nav.innerHTML=[['today','Today'],['progress','Progress'],['meals','Meals'],['plan','Training'],['races','Races'],['profile','Profile']].map(([k,l])=>`<button class="${V===k?'on':''}" data-a="nav" data-v="${k}">${l}</button>`).join('');
 if(V==='plan')refreshPlan();
@@ -284,9 +285,17 @@ else if(a==='ck'){const g=id=>document.getElementById(id).value.trim(),L={...(S.
 if(bad){alert('Please check the numbers you entered.');return}
 const so=g('cso');if(so)L.so=+so;
 if(!Object.keys(L).length){alert('Enter at least one value.');return}
-S.log[ds]=L;if(L.kg)S.kg=L.kg;if(L.bf)S.bf=L.bf;save();if(DBX)DBX.doc('log/'+ds).set(L).catch(e=>{note='Could not save the check-in ('+((e&&e.code)||'error')+').';render(true)});render()}
+S.log[ds]=L;if(L.kg)S.kg=L.kg;if(L.bf)S.bf=L.bf;save();if(SB&&UID)SB.from('log').upsert({user_id:UID,day:ds,data:L}).then(r=>{if(r.error){note='Could not save the check-in.';render(true)}});render()}
 else if(a==='addev'){const n=document.getElementById('en').value.trim(),d=document.getElementById('ed').value;if(!n||!d){alert('Add a name and a date.');return}S.events.push({name:n,date:d,p:document.getElementById('ep').value});save();render()}
-else if(a==='reset'){if(confirm('Delete your profile and start over? Your check-ins are kept.')){const p=DBX?DBX.doc('app/profile').delete():Promise.resolve();p.then(()=>{wrote='';S=null;V='setup';try{localStorage.removeItem('cad1')}catch(x){}render()})}}
+else if(a==='reset'){if(confirm('Delete your profile and start over? Your check-ins are kept.')){SB.from('profile').delete().eq('user_id',UID).then(r=>{if(r.error){note='Could not reset.';render(true);return}wrote='';S=null;V='setup';render()})}}
+else if(a==='signout'){SB.auth.signOut()}
+else if(a==='signin'||a==='signup'){const em=document.getElementById('em').value.trim(),pw=document.getElementById('pw').value;
+const say=m=>{const e=document.getElementById('nt');if(e)e.textContent=m};
+if(!em||pw.length<6){say('Enter your email and a password of at least 6 characters.');return}
+(async()=>{say('');const r=a==='signin'?await SB.auth.signInWithPassword({email:em,password:pw}):await SB.auth.signUp({email:em,password:pw});
+if(r.error){say(a==='signup'?'Could not create the account. It may already exist, or sign-ups are closed.':'Sign-in failed. Check your email and password.');return}
+if(!r.data.session){say('Account created. Confirm your email, then sign in.');return}
+UID=r.data.user.id;V='loading';render();await load()})()}
 else if(a==='start'){const g=id=>document.getElementById(id).value,kg=+g('kg'),cm=+g('cm'),bf=+g('bf');
 if(!document.getElementById('ok').checked){alert('Please confirm the checkbox to continue.');return}
 if(!(kg>=40&&kg<=200&&cm>=120&&cm<=230&&bf>=5&&bf<=55)){alert('Please check weight, height and body fat.');return}
