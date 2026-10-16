@@ -92,7 +92,8 @@ const SB_URL='https://uzswfnadwnxebrvcsblf.supabase.co',SB_KEY='sb_publishable_3
 let SB=null,UID=null,LOG={},wrote='',writing=false,tm=null,note='';
 V='loading';
 const sj=v=>v&&typeof v==='object'?Array.isArray(v)?'['+v.map(sj).join(',')+']':'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+sj(v[k])).join(',')+'}':JSON.stringify(v);
-const norm=()=>{S.food=S.food||{};S.ov=S.ov||{};S.st=S.st||{};S.fb=S.fb||{};S.events=S.events||[];S.done=S.done||{};S.sched.forEach(x=>{if(!x.at)x.at='06:00'});S.log=LOG};
+const DEFREG={"fixed":[{"t":"07:30","n":"Breakfast","f":"3 eggs + 2 × 40 g sourdough + 1 fruit","p":27,"c":61,"fa":17},{"t":"10:30","n":"Mid-morning","f":"40 g whey + 3-5 g creatine","p":30,"c":3,"fa":2},{"t":"16:00","n":"Snack","f":"200 g protein yoghurt + 100 g berries + 1 fruit","p":20,"c":38,"fa":3,"mv":1}],"lt":"13:00","dt":"19:00","pre":"Banana + 1 sourdough slice with honey","lunch":[["chicken","couscous"],["beef","rice"],["chicken","rice"],["tuna","sweetpotato"],["beef","rice"],["chicken","couscous"],["tuna","sweetpotato"]],"dinner":[["beef","pasta"],["chicken","noodles"],["fish","rice"],["chicken","rice"],["fish","potato"],["steak","rice"],["salmon","potato"]]};
+const norm=()=>{if(!S.reg)S.reg=JSON.parse(JSON.stringify(DEFREG));S.food=S.food||{};S.ov=S.ov||{};S.st=S.st||{};S.fb=S.fb||{};S.events=S.events||[];S.done=S.done||{};S.sched.forEach(x=>{if(!x.at)x.at='06:00'});S.log=LOG};
 const typing=()=>{const a=document.activeElement;return !!a&&['INPUT','SELECT','TEXTAREA'].includes(a.tagName)};
 const payload=()=>{const p={...S};delete p.log;return JSON.parse(JSON.stringify(p))};
 async function flush(){tm=null;if(!SB||!UID||!S||writing)return;const p=payload(),j=sj(p);if(j===wrote)return;writing=true;
